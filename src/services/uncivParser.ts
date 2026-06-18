@@ -1,6 +1,6 @@
 import { gunzipSync } from 'node:zlib';
 import { AppError } from '../lib/appError.js';
-import type { GameSummaryResult, ParserContext, TurnLookupResult } from '../types/unciv.js';
+import type { ParserContext, TurnLookupResult } from '../types/unciv.js';
 import { isNonEmptyString, isRecord, toFiniteNumber } from '../utils/guards.js';
 import {
   findFirstByKeyCandidates,
@@ -221,52 +221,7 @@ const extractGameId = (payload: unknown): string | undefined => {
   return undefined;
 };
 
-const unique = (values: string[]): string[] => [...new Set(values)];
 
-const extractCivilizationName = (entry: unknown): string | undefined => {
-  if (isNonEmptyString(entry)) return entry;
-  if (!isRecord(entry)) return undefined;
-
-  const nameMatch = findFirstByPaths(entry, PLAYER_NAME_PATHS, isNonEmptyString);
-  if (!nameMatch) return undefined;
-  return nameMatch.value;
-};
-
-const isHumanCivilization = (entry: unknown): boolean => {
-  if (!isRecord(entry)) return false;
-
-  const playerType = findFirstByPaths(entry, PLAYER_TYPE_PATHS, isNonEmptyString)?.value?.toLowerCase();
-  if (playerType === 'human') return true;
-
-  const playerId = findFirstByPaths(entry, PLAYER_ID_PATHS, isNonEmptyString)?.value;
-  return isNonEmptyString(playerId);
-};
-
-const extractCivilizations = (
-  payload: unknown
-): { civilizations: string[]; humanCivilizations: string[]; path: string } | undefined => {
-  const byPath = findFirstByPaths(payload, CIV_ARRAY_PATH_CANDIDATES, Array.isArray);
-  if (!byPath) return undefined;
-
-  const civilizations: string[] = [];
-  const humanCivilizations: string[] = [];
-
-  byPath.value.forEach(entry => {
-    const name = extractCivilizationName(entry);
-    if (!name) return;
-
-    civilizations.push(name);
-    if (isHumanCivilization(entry)) {
-      humanCivilizations.push(name);
-    }
-  });
-
-  return {
-    civilizations: unique(civilizations),
-    humanCivilizations: unique(humanCivilizations),
-    path: byPath.path,
-  };
-};
 
 export const extractTurnLookupFromPayload = (
   payload: unknown,
@@ -318,59 +273,3 @@ export const extractTurnLookupFromPayload = (
   return result;
 };
 
-export const extractGameSummaryFromPayload = (
-  payload: unknown,
-  context: ParserContext
-): Omit<GameSummaryResult, 'checkedAt'> => {
-  if (!isRecord(payload) && !Array.isArray(payload)) {
-    throw new AppError('PARSE_FAILED', '응답 JSON이 객체 형태가 아닙니다.', {
-      meta: {
-        source: context.source,
-        requestedGameId: context.requestedGameId,
-        resolvedGameId: context.resolvedGameId,
-      },
-    });
-  }
-
-  const player = extractPlayer(payload);
-  if (!player) {
-    throw new AppError('PARSE_FAILED', '응답에서 현재 차례 플레이어 필드를 찾지 못했습니다.', {
-      meta: {
-        source: context.source,
-        requestedGameId: context.requestedGameId,
-        resolvedGameId: context.resolvedGameId,
-      },
-    });
-  }
-
-  const turn = extractTurnNumber(payload);
-  const updatedAt = extractUpdatedAt(payload);
-  const gameId = extractGameId(payload) ?? context.resolvedGameId;
-  const civilizationInfo = extractCivilizations(payload);
-
-  const result: Omit<GameSummaryResult, 'checkedAt'> = {
-    requestedGameId: context.requestedGameId,
-    resolvedGameId: gameId,
-    currentPlayer: player.value,
-    civilizations: civilizationInfo?.civilizations ?? [],
-    humanCivilizations: civilizationInfo?.humanCivilizations ?? [],
-    source: context.source,
-    matchedPlayerField: player.path,
-  };
-
-  if (turn) {
-    result.turn = turn.value;
-    result.matchedTurnField = turn.path;
-  }
-
-  if (updatedAt) {
-    result.updatedAt = updatedAt.value;
-    result.matchedUpdatedAtField = updatedAt.path;
-  }
-
-  if (civilizationInfo) {
-    result.matchedCivilizationsField = civilizationInfo.path;
-  }
-
-  return result;
-};

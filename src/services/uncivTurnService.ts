@@ -1,12 +1,8 @@
 import { env } from '../config/env.js';
 import { AppError, isAppError } from '../lib/appError.js';
-import type { GameSummaryResult, ServerAliveResult, TurnLookupResult } from '../types/unciv.js';
+import type { TurnLookupResult } from '../types/unciv.js';
 import { UncivApiClient } from './uncivApiClient.js';
-import {
-  decodeUncivFileBody,
-  extractGameSummaryFromPayload,
-  extractTurnLookupFromPayload,
-} from './uncivParser.js';
+import { decodeUncivFileBody, extractTurnLookupFromPayload } from './uncivParser.js';
 
 const GAME_ID_REGEX = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}(_Preview)?$/i;
 
@@ -178,59 +174,6 @@ export class UncivTurnService {
     }
 
     return throwLookupError(buckets, requestedGameId, '응답은 받았지만 현재 차례 필드를 해석하지 못했습니다.');
-  }
-
-  async lookupSummary(rawGameId: string): Promise<GameSummaryResult> {
-    const requestedGameId = validateGameId(rawGameId);
-    const candidates = buildCandidateGameIds(requestedGameId);
-
-    const buckets: ErrorBuckets = { parseErrors: [] };
-    let freshest: Omit<GameSummaryResult, 'checkedAt'> | undefined;
-
-    for (const candidate of candidates) {
-      try {
-        const payload = await this.apiClient.fetchJsonPayload(candidate);
-        const parsed = extractGameSummaryFromPayload(payload, {
-          requestedGameId,
-          resolvedGameId: candidate,
-          source: 'jsons',
-        });
-        freshest = pickFresherResult(freshest, parsed);
-      } catch (error) {
-        recordLookupError(error, buckets);
-      }
-
-      try {
-        const raw = await this.apiClient.fetchFileRaw(candidate);
-        const payload = decodeUncivFileBody(raw);
-        const parsed = extractGameSummaryFromPayload(payload, {
-          requestedGameId,
-          resolvedGameId: candidate,
-          source: 'files',
-        });
-        freshest = pickFresherResult(freshest, parsed);
-      } catch (error) {
-        recordLookupError(error, buckets);
-      }
-    }
-
-    if (freshest) {
-      return {
-        ...freshest,
-        checkedAt: new Date().toISOString(),
-      };
-    }
-
-    return throwLookupError(buckets, requestedGameId, '응답은 받았지만 게임 요약 필드를 해석하지 못했습니다.');
-  }
-
-  async getServerStatus(): Promise<ServerAliveResult> {
-    const status = await this.apiClient.fetchIsAlive();
-    return {
-      authVersion: status.authVersion,
-      chatVersion: status.chatVersion,
-      checkedAt: new Date().toISOString(),
-    };
   }
 }
 

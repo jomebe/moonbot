@@ -4,7 +4,6 @@ import { gzipSync } from 'node:zlib';
 import { AppError } from '../src/lib/appError.js';
 import {
   decodeUncivFileBody,
-  extractGameSummaryFromPayload,
   extractTurnLookupFromPayload,
   parseJsonEndpointBody,
 } from '../src/services/uncivParser.js';
@@ -50,30 +49,6 @@ test('playerTurn 인덱스 기반 파싱', () => {
   assert.equal(result.turn, 12);
 });
 
-test('게임 요약 파싱(문명 목록/인간 문명)', () => {
-  const payload = {
-    gameId: 'aaaaaaa1-2222-3333-4444-bbbbbbbbbbbb',
-    currentPlayer: 'Korea',
-    turns: 45,
-    civilizations: [
-      { civName: 'Korea', playerType: 'Human' },
-      { civName: 'Rome', playerType: 'AI' },
-      { civName: 'Babylon', playerId: '123456789' },
-    ],
-  };
-
-  const result = extractGameSummaryFromPayload(payload, {
-    requestedGameId: payload.gameId,
-    resolvedGameId: payload.gameId,
-    source: 'jsons',
-  });
-
-  assert.equal(result.currentPlayer, 'Korea');
-  assert.equal(result.turn, 45);
-  assert.deepEqual(result.civilizations, ['Korea', 'Rome', 'Babylon']);
-  assert.deepEqual(result.humanCivilizations, ['Korea', 'Babylon']);
-  assert.equal(result.matchedCivilizationsField, 'civilizations');
-});
 
 test('/files base64+gzip 응답 디코딩', () => {
   const original = {

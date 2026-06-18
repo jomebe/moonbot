@@ -3,6 +3,7 @@ import { commandMap } from './commands/index.js';
 import { requireRuntimeEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { createUncivTurnService } from './services/uncivTurnService.js';
+import { startPolling } from './services/pollingService.js';
 
 const { discordToken } = requireRuntimeEnv();
 const turnService = createUncivTurnService();
@@ -13,6 +14,7 @@ const client = new Client({
 
 client.once(Events.ClientReady, readyClient => {
   logger.info(`Discord 봇 로그인 완료: ${readyClient.user.tag}`);
+  startPolling(readyClient, turnService);
 });
 
 client.on(Events.InteractionCreate, async interaction => {

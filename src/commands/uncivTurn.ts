@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../config/logger.js';
+import { dbService } from '../services/dbService.js';
 import { formatIsoToKstLabel, formatIsoWithElapsedLabel } from '../utils/dateDisplay.js';
 import { toUserErrorMessage } from '../utils/errorMessage.js';
 import type { SlashCommandModule } from './types.js';
@@ -11,9 +12,9 @@ const commandData = new SlashCommandBuilder()
   .addStringOption(option =>
     option
       .setName('gameid')
-      .setDescription('조회할 Unciv 게임 ID')
-      .setDescriptionLocalizations({ ko: '조회할 Unciv 게임 ID' })
-      .setRequired(true)
+      .setDescription('조회할 Unciv 게임 ID (생략 시 채널 연동 게임 조회)')
+      .setDescriptionLocalizations({ ko: '조회할 Unciv 게임 ID (생략 시 채널 연동 게임 조회)' })
+      .setRequired(false)
   );
 
 const inferUpdatedAtLabel = (matchedUpdatedAtField: string | undefined): string => {
@@ -24,24 +25,32 @@ const inferUpdatedAtLabel = (matchedUpdatedAtField: string | undefined): string 
   return '마지막 갱신 추정';
 };
 
-const formatTurnMessage = (result: {
-  resolvedGameId: string;
-  currentPlayer: string;
-  turn?: number;
-  updatedAt?: string;
-  checkedAt: string;
-  matchedUpdatedAtField?: string;
-}): string => {
+const formatTurnMessage = (
+  result: {
+    resolvedGameId: string;
+    currentPlayer: string;
+    turn?: number;
+    updatedAt?: string;
+    checkedAt: string;
+    matchedUpdatedAtField?: string;
+  },
+  mappedUserId?: string
+): string => {
   const checkedAtLabel = formatIsoToKstLabel(result.checkedAt);
   const updatedAtLabel = inferUpdatedAtLabel(result.matchedUpdatedAtField);
+  const playerDisplay = mappedUserId ? `${result.currentPlayer} (<@${mappedUserId}>)` : result.currentPlayer;
 
   const lines = [
     `게임 ID: ${result.resolvedGameId}`,
-    `현재 차례: ${result.currentPlayer}`,
+    `현재 차례: ${playerDisplay}`,
     `현재 턴: ${result.turn ?? '알 수 없음'}`,
     result.updatedAt ? `${updatedAtLabel}: ${formatIsoWithElapsedLabel(result.updatedAt, result.checkedAt)}` : undefined,
     `조회 시각: ${checkedAtLabel}`,
   ].filter((line): line is string => typeof line === 'string');
+
+  if (mappedUserId) {
+    lines.push(`\n🔔 **현재 <@${mappedUserId}> 님의 차례입니다!**`);
+  }
 
   return lines.join('\n');
 };
@@ -50,13 +59,35 @@ export const uncivTurnCommand: SlashCommandModule = {
   data: commandData,
 
   async execute(interaction: ChatInputCommandInteraction, context) {
-    const gameId = interaction.options.getString('gameid', true);
+    const channelId = interaction.channelId;
+    let gameId = interaction.options.getString('gameid');
+
+    // gameid가 없으면 연동된 게임 조회
+    if (!gameId) {
+      const link = dbService.getLink(channelId);
+      if (!link) {
+        await interaction.reply({
+          content: '❌ 이 채널에 연동된 Unciv 게임이 없습니다. \`/연동\`을 먼저 실행하거나 \`/차례 [gameid]\`로 조회해주세요.',
+          ephemeral: true,
+        });
+        return;
+      }
+      gameId = link.gameId;
+    }
 
     await interaction.deferReply();
 
     try {
       const result = await context.turnService.lookup(gameId);
-      await interaction.editReply(formatTurnMessage(result));
+
+      // 연동된 게임이고, 현재 플레이어 매핑이 되어있다면 멘션 추가
+      const link = dbService.getLink(channelId);
+      const mappedUserId =
+        link && link.gameId === result.resolvedGameId
+          ? link.players[result.currentPlayer]
+          : undefined;
+
+      await interaction.editReply(formatTurnMessage(result, mappedUserId));
     } catch (error) {
       logger.warn('/차례 처리 중 오류', error);
       await interaction.editReply(toUserErrorMessage(error));

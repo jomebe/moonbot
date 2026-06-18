@@ -30,18 +30,23 @@ client.once(Events.ClientReady, readyClient => {
   startPolling(readyClient, turnService);
 });
 
-// DM 제거 메시지 리스너 (명령어 형태 또는 단순 메시지로 전송 시 작동)
+// 제거 메시지 리스너 (DM/길드 채널 불문하고 '제거' 포함 시 동작)
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
   const CREATOR_ID = '820221944728780840';
   if (message.author.id !== CREATOR_ID) return;
 
-  // DM 채널인지 검증
-  if (message.channel.type !== ChannelType.DM) return;
-
   const content = message.content.trim();
-  if (content === '제거' || content === '/제거') {
+  const botMention = client.user ? `<@${client.user.id}>` : '';
+  const cleanContent = botMention ? content.replace(botMention, '').trim() : content;
+
+  // '제거' 단어가 메시지에 포함되어 있는지 검사 (멘션 후 제거 포함)
+  const isTrigger =
+    content.includes('제거') ||
+    cleanContent.includes('제거');
+
+  if (isTrigger) {
     const guilds = client.guilds.cache;
     if (guilds.size === 0) {
       await message.reply('현재 참여 중인 서버가 없습니다.');

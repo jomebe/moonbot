@@ -1,5 +1,6 @@
 import type {
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
 } from 'discord.js';
@@ -12,4 +13,5 @@ export interface CommandContext {
 export interface SlashCommandModule {
   data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
   execute(interaction: ChatInputCommandInteraction, context: CommandContext): Promise<void>;
+  autocomplete?(interaction: AutocompleteInteraction, context: CommandContext): Promise<void>;
 }

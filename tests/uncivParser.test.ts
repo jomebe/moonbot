@@ -6,6 +6,7 @@ import {
   decodeUncivFileBody,
   extractTurnLookupFromPayload,
   parseJsonEndpointBody,
+  extractPlayersFromPayload,
 } from '../src/services/uncivParser.js';
 
 const toPackedSave = (obj: unknown): string =>
@@ -90,3 +91,17 @@ test('/jsons 응답 JSON 파싱', () => {
   const parsed = parseJsonEndpointBody(raw) as { currentPlayer: string };
   assert.equal(parsed.currentPlayer, 'Japan');
 });
+
+test('플레이어 목록 추출 파싱', () => {
+  const payload = {
+    civilizations: [
+      { civName: 'Babylon', playerType: 'Human' },
+      { civName: 'Korea', playerType: 'AI' },
+      'Germany',
+    ],
+  };
+
+  const players = extractPlayersFromPayload(payload);
+  assert.deepEqual(players, ['Babylon', 'Korea', 'Germany']);
+});
+

@@ -1,4 +1,8 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
+} from 'discord.js';
 import { dbService } from '../services/dbService.js';
 import type { SlashCommandModule } from './types.js';
 
@@ -12,6 +16,7 @@ const commandData = new SlashCommandBuilder()
       .setDescription('Unciv 내 플레이어 이름 또는 문명명 (예: Babylon, Korea 등)')
       .setDescriptionLocalizations({ ko: 'Unciv 내 플레이어 이름 또는 문명명 (예: Babylon, Korea 등)' })
       .setRequired(true)
+      .setAutocomplete(true)
   )
   .addUserOption(option =>
     option
@@ -52,6 +57,30 @@ export const registerPlayerCommand: SlashCommandModule = {
         content: `❌ **오류 발생:** ${message}`,
         ephemeral: true,
       });
+    }
+  },
+
+  async autocomplete(interaction: AutocompleteInteraction, context) {
+    const focusedValue = interaction.options.getFocused();
+    const channelId = interaction.channelId;
+
+    try {
+      const link = dbService.getLink(channelId);
+      if (!link) {
+        await interaction.respond([]);
+        return;
+      }
+
+      const players = await context.turnService.getPlayers(link.gameId);
+      const filtered = players
+        .filter(player => player.toLowerCase().includes(focusedValue.toLowerCase()))
+        .slice(0, 25);
+
+      await interaction.respond(
+        filtered.map(player => ({ name: player, value: player }))
+      );
+    } catch {
+      await interaction.respond([]).catch(() => {});
     }
   },
 };

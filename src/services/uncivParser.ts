@@ -273,3 +273,32 @@ export const extractTurnLookupFromPayload = (
   return result;
 };
 
+export const extractPlayersFromPayload = (payload: unknown): string[] => {
+  if (!isRecord(payload) && !Array.isArray(payload)) {
+    return [];
+  }
+
+  const byPath = findFirstByPaths(payload, CIV_ARRAY_PATH_CANDIDATES, Array.isArray);
+  if (!byPath) return [];
+
+  const players: string[] = [];
+  byPath.value.forEach(entry => {
+    let name: string | undefined;
+    if (isNonEmptyString(entry)) {
+      name = entry;
+    } else if (isRecord(entry)) {
+      const nameMatch = findFirstByPaths(entry, PLAYER_NAME_PATHS, isNonEmptyString);
+      if (nameMatch) {
+        name = nameMatch.value;
+      }
+    }
+
+    if (name) {
+      players.push(name);
+    }
+  });
+
+  return [...new Set(players)];
+};
+
+

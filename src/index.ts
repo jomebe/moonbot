@@ -146,6 +146,19 @@ client.on(Events.InteractionCreate, async interaction => {
     return;
   }
 
+  // Autocomplete 처리
+  if (interaction.isAutocomplete()) {
+    const command = commandMap.get(interaction.commandName);
+    if (command && command.autocomplete) {
+      try {
+        await command.autocomplete(interaction, { turnService });
+      } catch (error) {
+        logger.error('Autocomplete 처리 중 예외', error);
+      }
+    }
+    return;
+  }
+
   // 기존 슬래시 명령어 처리
   if (!interaction.isChatInputCommand()) return;
 

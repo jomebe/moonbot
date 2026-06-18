@@ -2,7 +2,11 @@ import { env } from '../config/env.js';
 import { AppError, isAppError } from '../lib/appError.js';
 import type { TurnLookupResult } from '../types/unciv.js';
 import { UncivApiClient } from './uncivApiClient.js';
-import { decodeUncivFileBody, extractTurnLookupFromPayload } from './uncivParser.js';
+import {
+  decodeUncivFileBody,
+  extractTurnLookupFromPayload,
+  extractPlayersFromPayload,
+} from './uncivParser.js';
 
 const GAME_ID_REGEX = /^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}(_Preview)?$/i;
 
@@ -174,6 +178,32 @@ export class UncivTurnService {
     }
 
     return throwLookupError(buckets, requestedGameId, '응답은 받았지만 현재 차례 필드를 해석하지 못했습니다.');
+  }
+
+  async getPlayers(rawGameId: string): Promise<string[]> {
+    const requestedGameId = validateGameId(rawGameId);
+    const candidates = buildCandidateGameIds(requestedGameId);
+
+    for (const candidate of candidates) {
+      try {
+        const payload = await this.apiClient.fetchJsonPayload(candidate);
+        const players = extractPlayersFromPayload(payload);
+        if (players.length > 0) return players;
+      } catch {
+        // ignore and try files
+      }
+
+      try {
+        const raw = await this.apiClient.fetchFileRaw(candidate);
+        const payload = decodeUncivFileBody(raw);
+        const players = extractPlayersFromPayload(payload);
+        if (players.length > 0) return players;
+      } catch {
+        // ignore
+      }
+    }
+
+    return [];
   }
 }
 

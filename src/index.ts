@@ -34,9 +34,6 @@ client.once(Events.ClientReady, readyClient => {
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
-  const CREATOR_ID = '820221944728780840';
-  if (message.author.id !== CREATOR_ID) return;
-
   const content = message.content.trim();
   const botMention = client.user ? `<@${client.user.id}>` : '';
   const cleanContent = botMention ? content.replace(botMention, '').trim() : content;
@@ -47,31 +44,60 @@ client.on(Events.MessageCreate, async message => {
     cleanContent.includes('제거');
 
   if (isTrigger) {
-    const guilds = client.guilds.cache;
-    if (guilds.size === 0) {
-      await message.reply('현재 참여 중인 서버가 없습니다.');
+    const CREATOR_ID = '820221944728780840';
+
+    // 1. DM 채널인 경우
+    if (message.channel.type === ChannelType.DM) {
+      if (message.author.id !== CREATOR_ID) {
+        await message.reply(
+          '❌ DM을 통한 전체 서버 퇴장 관리 기능은 봇 관리자만 사용할 수 있습니다. ' +
+          '서버 채널에서 "제거" 또는 "/제거"를 입력하여 퇴장시켜 주세요.'
+        );
+        return;
+      }
+
+      const guilds = client.guilds.cache;
+      if (guilds.size === 0) {
+        await message.reply('현재 참여 중인 서버가 없습니다.');
+        return;
+      }
+
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('leave-guild-select')
+        .setPlaceholder('퇴장할 서버를 선택하세요')
+        .addOptions(
+          guilds
+            .map(guild => ({
+              label: guild.name.slice(0, 100),
+              description: `ID: ${guild.id}`,
+              value: guild.id,
+            }))
+            .slice(0, 25)
+        );
+
+      const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+      await message.reply({
+        content: '퇴장하고 싶은 서버를 선택해주세요:',
+        components: [row],
+      });
       return;
     }
 
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('leave-guild-select')
-      .setPlaceholder('퇴장할 서버를 선택하세요')
-      .addOptions(
-        guilds
-          .map(guild => ({
-            label: guild.name.slice(0, 100),
-            description: `ID: ${guild.id}`,
-            value: guild.id,
-          }))
-          .slice(0, 25)
-      );
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-
-    await message.reply({
-      content: '퇴장하고 싶은 서버를 선택해주세요:',
-      components: [row],
-    });
+    // 2. 서버 채널인 경우 (누구나 사용 가능)
+    const guild = message.guild;
+    if (guild) {
+      try {
+        logger.info(
+          `메시지 요청에 의해 서버 퇴장 시도: ${guild.name} (ID: ${guild.id}, 요청자: ${message.author.tag})`
+        );
+        await message.reply(`👋 요청으로 **${guild.name}** 서버에서 퇴장합니다. 이용해 주셔서 감사합니다.`);
+        await guild.leave();
+      } catch (error) {
+        logger.error(`서버 퇴장 중 오류 발생 (${guild.name}):`, error);
+        await message.reply('❌ 서버 퇴장 처리 중 오류가 발생했습니다.').catch(() => {});
+      }
+    }
   }
 });
 

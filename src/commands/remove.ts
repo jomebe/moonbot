@@ -2,28 +2,15 @@ import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.j
 import { logger } from '../config/logger.js';
 import type { SlashCommandModule } from './types.js';
 
-const CREATOR_ID = '820221944728780840';
-
 const commandData = new SlashCommandBuilder()
   .setName('제거')
-  .setDescription('봇을 서버에서 퇴장시킵니다. (개발자 전용)')
-  .setDescriptionLocalizations({ ko: '봇을 서버에서 퇴장시킵니다. (개발자 전용)' });
+  .setDescription('봇을 현재 서버에서 퇴장시킵니다.')
+  .setDescriptionLocalizations({ ko: '봇을 현재 서버에서 퇴장시킵니다.' });
 
 export const removeCommand: SlashCommandModule = {
   data: commandData,
 
   async execute(interaction: ChatInputCommandInteraction) {
-    const userId = interaction.user.id;
-
-    // 개발자 권한 검증
-    if (userId !== CREATOR_ID) {
-      await interaction.reply({
-        content: '❌ 이 명령어는 개발자(봇 제작자)만 사용할 수 있습니다.',
-        ephemeral: true,
-      });
-      return;
-    }
-
     const guild = interaction.guild;
     if (!guild) {
       await interaction.reply({
@@ -34,9 +21,9 @@ export const removeCommand: SlashCommandModule = {
     }
 
     try {
-      logger.info(`제작자 요청에 의해 서버 퇴장 시도: ${guild.name} (ID: ${guild.id})`);
+      logger.info(`요청에 의해 서버 퇴장 시도: ${guild.name} (ID: ${guild.id}, 요청자: ${interaction.user.tag})`);
       await interaction.reply({
-        content: '👋 제작자의 요청으로 봇이 서버에서 퇴장합니다. 이용해 주셔서 감사합니다.',
+        content: `👋 **${guild.name}** 서버에서 퇴장합니다. 이용해 주셔서 감사합니다.`,
       });
 
       await guild.leave();

@@ -1,19 +1,25 @@
-# Unciv 멀티플레이 공개 정보 조회 Discord 봇 (MVP)
+# Unciv 멀티플레이 턴 알림 Discord 봇
 
-Unciv 멀티플레이 게임의 `gameId`를 넣으면, 외부 Unciv 서버에서 공개 상태를 읽어 현재 차례/요약 정보를 알려주는 Discord 봇입니다.
+Unciv 멀티플레이 게임을 Discord 채널에 연동하여 실시간으로 턴을 감시하고, 턴이 넘어갔을 때 다음 플레이어(매핑된 디스코드 사용자)를 자동으로 멘션하여 알림을 주는 디스코드 봇입니다.
 
-## 핵심 포인트
+---
 
-- 1순위 조회: `GET /jsons/:gameId`
-- fallback 조회: `GET /files/:gameId`
-- 동일 gameId에서 `/jsons`와 `/files`를 모두 확인해 더 최신 턴/시각 데이터를 우선 채택
-- 서버 상태: `GET /isalive`
-- 목표: **지금 누구 차례인지**를 빠르게 반환
+## ⚠️ 중요: 슬래시 명령어가 안 뜰 때 해결법
 
-## 비공식 API 주의
+디스코드 봇을 서버에 초대할 때 **슬래시 명령어 권한(applications.commands)**을 함께 부여해야 명령어가 서버에 노출됩니다.
 
-이 구현은 UncivServer 계열 공개 서버 코드(`touhidurrr/UncivServer.xyz`)의 라우트를 기준으로 작성되었습니다.
-공식 API 보장이 없고, 서버 설정(권한/프록시/버전)에 따라 동작이 달라질 수 있습니다.
+### 1. 올바른 초대 링크 생성 방법
+디스코드 개발자 포털(Discord Developer Portal)에서 초대 링크를 만들 때 다음 항목들을 필수로 선택해주세요:
+- **OAuth2 > URL Generator** 메뉴로 이동
+- **Scopes**: `bot` 과 **`applications.commands`**를 **둘 다 반드시 체크**
+- **Bot Permissions**: `Send Messages` (메시지 전송 권한) 체크
+- 생성된 하단의 URL로 봇을 서버에 다시 초대하세요.
+
+### 2. 슬래시 명령어 등록 속도 문제 (글로벌 vs 길드)
+- **글로벌 등록 (기본값)**: `DISCORD_GUILD_ID` 환경변수를 비워둔 채 명령어 등록 스크립트를 실행하면, 전 세계 모든 서버에 반영되는 글로벌 명령어로 등록됩니다. 이는 디스코드 API 사정상 반영되는 데 **최대 1시간**이 걸릴 수 있습니다.
+- **길드 등록 (추천 - 즉시 반영)**: `.env` 파일에 봇이 있는 디스코드 서버 ID(길드 ID)를 `DISCORD_GUILD_ID`로 지정한 뒤 명령어를 등록하면 **1초 이내에 즉시** 명령어가 적용됩니다.
+
+---
 
 ## 프로젝트 구조
 
@@ -29,21 +35,18 @@ Unciv 멀티플레이 게임의 `gameId`를 넣으면, 외부 Unciv 서버에서
 │  ├─ commands
 │  │  ├─ index.ts
 │  │  ├─ types.ts
-│  │  ├─ botInfo.ts
-│  │  ├─ civilizations.ts
-│  │  ├─ gameSummary.ts
-│  │  ├─ gameIdCheck.ts
-│  │  ├─ help.ts
-│  │  ├─ lookupMeta.ts
-│  │  ├─ ping.ts
-│  │  ├─ serverStatus.ts
-│  │  └─ uncivTurn.ts
+│  │  ├─ linkGame.ts       # 게임 연동 (/연동)
+│  │  ├─ unlinkGame.ts     # 연동 해제 (/연동해제)
+│  │  ├─ registerPlayer.ts # 플레이어 매핑 (/등록)
+│  │  └─ uncivTurn.ts      # 차례 조회 (/차례)
 │  ├─ config
 │  │  ├─ env.ts
 │  │  └─ logger.ts
 │  ├─ lib
 │  │  └─ appError.ts
 │  ├─ services
+│  │  ├─ dbService.ts      # JSON 파일 데이터베이스
+│  │  ├─ pollingService.ts # 실시간 턴 감시 서비스
 │  │  ├─ uncivApiClient.ts
 │  │  ├─ uncivParser.ts
 │  │  └─ uncivTurnService.ts
@@ -55,125 +58,62 @@ Unciv 멀티플레이 게임의 `gameId`를 넣으면, 외부 Unciv 서버에서
 │     ├─ objectPath.ts
 │     └─ time.ts
 └─ tests
-   └─ uncivParser.test.ts
+   ├─ uncivParser.test.ts
+   └─ dbService.test.ts
 ```
 
-## 환경변수
+---
+
+## 환경변수 설정 (`.env`)
 
 - `DISCORD_TOKEN`: Discord 봇 토큰
-- `DISCORD_CLIENT_ID`: Discord 애플리케이션(Client) ID
-- `DISCORD_GUILD_ID`: 개발용 길드 ID (있으면 길드 명령어로 빠르게 반영)
-- `UNCIV_BASE_URL`: 조회할 Unciv 서버 주소
-- `LOG_LEVEL`: `debug | info | warn | error`
-- `REQUEST_TIMEOUT_MS`: HTTP 타임아웃(ms)
+- `DISCORD_CLIENT_ID`: Discord 애플리케이션 ID
+- `DISCORD_GUILD_ID`: 즉시 테스트할 디스코드 서버(길드) ID (개발/테스트 단계 권장)
+- `UNCIV_BASE_URL`: 조회할 Unciv 서버 주소 (기본값: `https://uncivserver.xyz`)
+- `LOG_LEVEL`: 로그 레벨 (`debug | info | warn | error`)
+- `REQUEST_TIMEOUT_MS`: API 요청 타임아웃(ms)
 
-## 설치 및 실행
+---
 
-```bash
-npm install
-cp .env.example .env
-```
+## 설치 및 실행 방법
 
-`.env`를 채운 뒤:
+### 1. 로컬 환경 실행
 
-```bash
-# 슬래시 명령어 등록
-npm run register:commands
+1. 의존성 설치:
+   ```bash
+   npm install
+   ```
+2. `.env` 파일 설정:
+   ```bash
+   cp .env.example .env
+   # .env 파일을 열고 실제 토큰 및 ID를 입력하세요.
+   ```
+3. 슬래시 명령어 등록 (길드 ID 설정 후 실행 시 즉시 반영):
+   ```bash
+   npm run register:commands
+   ```
+4. 봇 실행 (개발 모드):
+   ```bash
+   npm run dev
+   ```
 
-# 개발 실행
-npm run dev
-```
+### 2. Render.com 배포 환경 설정
 
-배포 실행:
+- **Build Command**:
+  ```bash
+  npm install && npm run build && npm run register:commands
+  ```
+- **Start Command**:
+  ```bash
+  npm run start
+  ```
+- **Environment Variables**: Render의 설정 페이지에서 `.env`에 정의된 변수들을 등록하세요.
 
-```bash
-npm run build
-npm run start
-```
+---
 
-## 명령어
+## 슬래시 명령어 사용법
 
-- `/차례 gameid:<string>`
-- `/게임요약 gameid:<string>`
-- `/문명목록 gameid:<string>`
-- `/조회메타 gameid:<string>`
-- `/아이디검증 gameid:<string>`
-- `/서버상태`
-- `/핑`
-- `/봇정보`
-- `/도움말`
-
-## 응답 예시
-
-`/차례` 성공:
-
-```text
-게임 ID: 12345678-1234-1234-1234-1234567890ab
-현재 차례: Babylon
-현재 턴: 143
-마지막 갱신 추정: 2026-04-14 14:20:11 KST (UTC 2026-04-14T05:20:11.000Z) · 2초 전
-조회 시각: 2026-04-14 14:20:13 KST (UTC 2026-04-14T05:20:13.482Z)
-```
-
-`/게임요약` 성공:
-
-```text
-게임 ID: 12345678-1234-1234-1234-1234567890ab
-현재 차례: Babylon
-현재 턴: 143
-전체 문명: Babylon, Egypt, Korea
-인간 문명: Babylon, Korea
-마지막 갱신 추정: 2026-04-14 14:20:11 KST (UTC 2026-04-14T05:20:11.000Z) · 2초 전
-조회 시각: 2026-04-14 14:20:13 KST (UTC 2026-04-14T05:20:13.482Z)
-```
-
-`/서버상태` 성공:
-
-```text
-Unciv 서버 상태
-authVersion: 24
-chatVersion: 1
-조회 시각: 2026-04-14T05:20:13.482Z
-```
-
-실패(존재하지 않는 gameId):
-
-```text
-게임을 찾을 수 없습니다.
-게임 ID가 틀렸거나 서버에서 조회를 막고 있을 수 있습니다.
-```
-
-실패(인증 필요 서버):
-
-```text
-이 서버는 인증이 필요한 서버일 수 있습니다.
-공개 조회가 막혀 있을 때는 /jsons 또는 /files 접근이 거부됩니다.
-```
-
-실패(파싱 불가):
-
-```text
-응답은 받았지만 필요한 필드를 해석하지 못했습니다.
-서버 응답 구조가 다르거나 압축 형식이 다른 경우일 수 있습니다.
-```
-
-## 테스트
-
-```bash
-npm run test
-```
-
-`tests/uncivParser.test.ts`에서 다음을 검증합니다.
-
-- 표준 `currentPlayer` 필드 파싱
-- `playerTurn` 인덱스 기반 파싱
-- `/files` 응답(base64+gzip) 디코딩
-- 파싱 실패 케이스
-
-## 추후 확장 아이디어 (미구현)
-
-- 게임 별칭 저장/목록/삭제 (`/언시브게임등록`, `/언시브게임목록`, `/언시브게임삭제`)
-- 여러 gameId 일괄 조회
-- 폴링 기반 "내 차례" 알림
-- `/sync` 웹소켓 기반 실시간 감시
-- 인증 기반 `/api/profiles/:id/games` 연동
+- `/연동 gameid:<string>`: 현재 채널에 Unciv 게임 ID를 연동합니다.
+- `/연동해제`: 현재 채널의 게임 연동을 해제합니다.
+- `/등록 플레이어이름:<string> 디스코드유저:<mention>`: Unciv 플레이어/문명과 디스코드 계정을 연결합니다.
+- `/차례`: 현재 누구 차례인지 조회하며, 매핑된 플레이어가 있다면 멘션하여 알려줍니다.

@@ -4,6 +4,18 @@ import { dbService } from './dbService.js';
 import type { UncivTurnService } from './uncivTurnService.js';
 
 let pollingInterval: NodeJS.Timeout | null = null;
+const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
+
+const getKstHour = (date: Date): number => (date.getUTCHours() + 9) % 24;
+
+const sendChannelMessage = async (client: Client, channelId: string, message: string): Promise<void> => {
+  const channel = await client.channels.fetch(channelId);
+  if (channel && channel.isTextBased()) {
+    await (channel as any).send(message);
+    return;
+  }
+  logger.warn(`채널(${channelId})이 텍스트 채널이 아니거나 접근할 수 없습니다.`);
+};
 
 export const startPolling = (
   client: Client,
@@ -43,35 +55,38 @@ export const startPolling = (
             );
 
             const mappedUserId = link.players[result.currentPlayer];
-            const playerDisplay = mappedUserId ? `<@${mappedUserId}> 님` : `**${result.currentPlayer}**`;
+            const playerDisplay = mappedUserId ? `<@${mappedUserId}>` : `**${result.currentPlayer}**`;
 
-            let msg = `🔔 **[Unciv 턴 알림]**\n`;
-            if (lastPlayer) {
-              msg += `이전 플레이어(**${lastPlayer}**)가 턴을 넘겼습니다!\n`;
-            } else {
-              msg += `턴이 업데이트되었습니다!\n`;
-            }
-            msg += `다음 차례: ${playerDisplay}\n`;
-            msg += `- 게임 ID: \`${result.resolvedGameId}\`\n`;
-            if (result.turn !== undefined) {
-              msg += `- 현재 턴: **${result.turn}**`;
-            }
+            const msg = `${playerDisplay} ㅌㄴㄱ`;
 
             // 디스코드 채널로 메시지 전송
             try {
-              const channel = await client.channels.fetch(link.channelId);
-              if (channel && channel.isTextBased()) {
-                await (channel as any).send(msg);
-              } else {
-                logger.warn(`채널(${link.channelId})이 텍스트 채널이 아니거나 접근할 수 없습니다.`);
-              }
+              await sendChannelMessage(client, link.channelId, msg);
             } catch (error) {
               logger.error(`채널(${link.channelId})에 알림 메시지 전송 중 오류 발생:`, error);
+            }
+          } else {
+            const now = new Date();
+            const reminderBase = link.lastReminderAt ?? link.turnStartedAt;
+            const reminderDue = reminderBase
+              ? now.getTime() - new Date(reminderBase).getTime() >= REMINDER_INTERVAL_MS
+              : false;
+            const isQuietHours = getKstHour(now) < 8;
+            const mappedUserId = link.players[result.currentPlayer];
+
+            if (reminderDue && !isQuietHours && mappedUserId) {
+              const reminder = (link.reminderCount ?? 0) === 0 ? '턴언넘' : '턴빨넘';
+              try {
+                await sendChannelMessage(client, link.channelId, `<@${mappedUserId}> ${reminder}`);
+                dbService.updateReminderState(link.channelId, now.toISOString());
+              } catch (error) {
+                logger.error(`채널(${link.channelId})에 재촉 메시지 전송 중 오류 발생:`, error);
+              }
             }
           }
 
           // 상태가 변경되었거나 최초 기록인 경우 DB 업데이트
-          if (lastPlayer !== result.currentPlayer || lastTurn !== result.turn) {
+          if (lastPlayer !== result.currentPlayer || lastTurn !== result.turn || !link.turnStartedAt) {
             dbService.updateLastKnownState(link.channelId, result.turn, result.currentPlayer);
           }
         } catch (error) {

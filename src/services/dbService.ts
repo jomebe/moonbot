@@ -8,6 +8,9 @@ export interface LinkedChannel {
   players: Record<string, string>; // Maps Unciv player/civ name -> Discord user ID
   lastTurn?: number | undefined;
   lastPlayer?: string | undefined;
+  turnStartedAt?: string | undefined;
+  lastReminderAt?: string | undefined;
+  reminderCount?: number | undefined;
 }
 
 export interface DatabaseSchema {
@@ -66,6 +69,9 @@ export class DbService {
       players: existing?.players ?? {},
       lastTurn: lastTurn !== undefined ? lastTurn : (existing?.lastTurn !== undefined ? existing.lastTurn : undefined),
       lastPlayer: lastPlayer !== undefined ? lastPlayer : (existing?.lastPlayer !== undefined ? existing.lastPlayer : undefined),
+      turnStartedAt: existing?.turnStartedAt ?? new Date().toISOString(),
+      lastReminderAt: existing?.lastReminderAt,
+      reminderCount: existing?.reminderCount ?? 0,
     };
     this.save(db);
   }
@@ -112,6 +118,19 @@ export class DbService {
     if (channel) {
       channel.lastTurn = lastTurn;
       channel.lastPlayer = lastPlayer;
+      channel.turnStartedAt = new Date().toISOString();
+      channel.lastReminderAt = undefined;
+      channel.reminderCount = 0;
+      this.save(db);
+    }
+  }
+
+  updateReminderState(channelId: string, sentAt: string): void {
+    const db = this.load();
+    const channel = db.channels[channelId];
+    if (channel) {
+      channel.lastReminderAt = sentAt;
+      channel.reminderCount = (channel.reminderCount ?? 0) + 1;
       this.save(db);
     }
   }

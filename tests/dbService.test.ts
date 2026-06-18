@@ -41,6 +41,8 @@ test('DbService - 게임 연동 등록 및 해제', () => {
   assert.equal(link.gameId, gameId);
   assert.equal(link.lastTurn, 1);
   assert.equal(link.lastPlayer, 'Babylon');
+  assert.ok(link.turnStartedAt);
+  assert.equal(link.reminderCount, 0);
   assert.deepEqual(link.players, {});
 
   // 연동 해제
@@ -95,4 +97,10 @@ test('DbService - 상태 업데이트', () => {
   assert.ok(link);
   assert.equal(link.lastTurn, 11);
   assert.equal(link.lastPlayer, 'Rome');
+  assert.equal(link.reminderCount, 0);
+
+  db.updateReminderState(channelId, '2026-06-19T01:00:00.000Z');
+  const remindedLink = db.getLink(channelId);
+  assert.equal(remindedLink?.lastReminderAt, '2026-06-19T01:00:00.000Z');
+  assert.equal(remindedLink?.reminderCount, 1);
 });

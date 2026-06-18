@@ -7,19 +7,23 @@ const registerCommands = async (): Promise<void> => {
   const { discordToken, clientId, guildId } = requireRegistrationEnv();
   const rest = new REST({ version: '10' }).setToken(discordToken);
 
-  if (guildId) {
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
-      body: commandJson,
-    });
-    logger.info(`길드 명령어 등록 완료 (guildId=${guildId})`);
-    return;
-  }
-
-  logger.warn('DISCORD_GUILD_ID가 없거나 유효하지 않아 글로벌 명령어로 등록합니다. 반영에 최대 1시간 걸릴 수 있습니다.');
+  logger.info('글로벌 슬래시 명령어 등록을 시작합니다...');
   await rest.put(Routes.applicationCommands(clientId), {
     body: commandJson,
   });
-  logger.info('글로벌 명령어 등록 완료');
+  logger.info('글로벌 슬래시 명령어 등록 완료');
+
+  if (guildId) {
+    logger.info(`개발용 길드 ID(${guildId})가 감지되어 해당 길드에도 슬래시 명령어를 즉시 반영 등록합니다.`);
+    try {
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+        body: commandJson,
+      });
+      logger.info(`개발용 길드 슬래시 명령어 등록 완료 (guildId=${guildId})`);
+    } catch (error) {
+      logger.warn(`개발용 길드 슬래시 명령어 등록 중 오류 발생 (guildId=${guildId}):`, error);
+    }
+  }
 };
 
 registerCommands().catch(error => {

@@ -12,6 +12,7 @@ import { requireRuntimeEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { createUncivTurnService } from './services/uncivTurnService.js';
 import { startPolling } from './services/pollingService.js';
+import { dbService } from './services/dbService.js';
 
 const { discordToken } = requireRuntimeEnv();
 const turnService = createUncivTurnService();
@@ -30,7 +31,7 @@ client.once(Events.ClientReady, readyClient => {
   startPolling(readyClient, turnService);
 });
 
-// 제거 메시지 리스너 (DM/길드 채널 불문하고 '제거' 포함 시 동작)
+// 메시지 리스너 (제거 / 빨넘 명령어 대응)
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
@@ -38,15 +39,15 @@ client.on(Events.MessageCreate, async message => {
   const botMention = client.user ? `<@${client.user.id}>` : '';
   const cleanContent = botMention ? content.replace(botMention, '').trim() : content;
 
-  // '제거' 단어가 메시지에 포함되어 있는지 검사 (멘션 후 제거 포함)
-  const isTrigger =
+  // 1. '제거' 단어가 메시지에 포함되어 있는지 검사 (멘션 후 제거 포함)
+  const isRemoveTrigger =
     content.includes('제거') ||
     cleanContent.includes('제거');
 
-  if (isTrigger) {
+  if (isRemoveTrigger) {
     const CREATOR_ID = '820221944728780840';
 
-    // 1. DM 채널인 경우
+    // 1-1. DM 채널인 경우
     if (message.channel.type === ChannelType.DM) {
       if (message.author.id !== CREATOR_ID) {
         await message.reply(
@@ -84,7 +85,7 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // 2. 서버 채널인 경우 (누구나 사용 가능)
+    // 1-2. 서버 채널인 경우 (누구나 사용 가능)
     const guild = message.guild;
     if (guild) {
       try {
@@ -96,6 +97,59 @@ client.on(Events.MessageCreate, async message => {
       } catch (error) {
         logger.error(`서버 퇴장 중 오류 발생 (${guild.name}):`, error);
         await message.reply('❌ 서버 퇴장 처리 중 오류가 발생했습니다.').catch(() => {});
+      }
+    }
+    return;
+  }
+
+  // 2. '빨넘' 단어가 메시지에 포함되어 있는지 검사 (멘션 후 빨넘 포함)
+  const isNudgeTrigger =
+    content.includes('빨넘') ||
+    cleanContent.includes('빨넘');
+
+  if (isNudgeTrigger) {
+    const channelId = message.channelId;
+    const link = dbService.getLink(channelId);
+    if (!link) {
+      // 직접 정확하게 부른 경우에만 안내합니다.
+      const isExactCommand =
+        content === '빨넘' ||
+        content === '/빨넘' ||
+        cleanContent === '빨넘' ||
+        cleanContent === '/빨넘';
+
+      if (isExactCommand) {
+        await message.reply('❌ 이 채널에 연동된 Unciv 게임이 없습니다. 먼저 `/연동 [gameId]` 명령어로 게임을 연동해 주세요.');
+      }
+      return;
+    }
+
+    try {
+      const result = await turnService.lookup(link.gameId);
+      const mappedUserId = link.players[result.currentPlayer];
+
+      if (mappedUserId) {
+        await message.reply(
+          `<@${mappedUserId}> 빨리넘겨시발\n` +
+          `*(현재 차례: **${result.currentPlayer}** / 턴: **${result.turn ?? '알 수 없음'}**)*`
+        );
+      } else {
+        await message.reply(
+          `**${result.currentPlayer}** 빨리넘겨시발\n` +
+          `*(등록된 디스코드 유저가 없어 멘션을 보낼 수 없습니다. \`/등록\` 명령어로 유저를 연결해주세요. / 턴: **${result.turn ?? '알 수 없음'}**)*`
+        );
+      }
+    } catch (error) {
+      logger.warn('메시지 기반 /빨넘 처리 중 오류', error);
+      const isExactCommand =
+        content === '빨넘' ||
+        content === '/빨넘' ||
+        cleanContent === '빨넘' ||
+        cleanContent === '/빨넘';
+
+      if (isExactCommand) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        await message.reply(`❌ 조회 실패: ${errorMsg}`);
       }
     }
   }

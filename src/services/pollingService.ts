@@ -75,7 +75,19 @@ export const startPolling = (
             const mappedUserId = link.players[result.currentPlayer];
 
             if (reminderDue && !isQuietHours && mappedUserId) {
-              const reminder = (link.reminderCount ?? 0) === 0 ? '턴언넘' : '턴빨넘';
+              const count = link.reminderCount ?? 0;
+              const messages = [
+                '턴 좀 넘겨주세요.',
+                '아직도 안넘겼냐? 빨리 좀 넘기자.',
+                '진짜 턴 안넘기고 뭐하냐? 턴빨넘;',
+                '시발 턴 안넘기냐? 빨리넘겨라',
+                '야 이 개새끼야 턴 안넘기고 쳐자냐? 빨리넘겨라시발련아',
+                '개사발면아 뒤지고싶냐? 안넘기면 컴퓨터 터트린다 빨리넘겨시발련아',
+              ];
+              const reminder = count >= messages.length
+                ? '너 때문에 게임 다 멈췄잖아 개새끼야 빨리넘겨라 뒤지기싫으면'
+                : (messages[count] ?? messages[0]!);
+
               try {
                 await sendChannelMessage(client, link.channelId, `<@${mappedUserId}> ${reminder}`);
                 dbService.updateReminderState(link.channelId, now.toISOString());

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { logger } from '../config/logger.js';
 
 export interface LinkedChannel {
@@ -17,11 +18,14 @@ export interface DatabaseSchema {
   channels: Record<string, LinkedChannel>;
 }
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '..', '..');
+
 export class DbService {
   private readonly dbPath: string;
 
   constructor(customPath?: string) {
-    this.dbPath = customPath ?? path.join(process.cwd(), 'data', 'db.json');
+    this.dbPath = customPath ?? path.join(projectRoot, 'data', 'db.json');
   }
 
   private ensureDirectoryAndFile(): void {

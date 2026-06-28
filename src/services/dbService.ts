@@ -12,6 +12,7 @@ export interface LinkedChannel {
   turnStartedAt?: string | undefined;
   lastReminderAt?: string | undefined;
   reminderCount?: number | undefined;
+  reminderDisabled?: boolean | undefined;
 }
 
 export interface DatabaseSchema {
@@ -76,6 +77,7 @@ export class DbService {
       turnStartedAt: existing?.turnStartedAt ?? new Date().toISOString(),
       lastReminderAt: existing?.lastReminderAt,
       reminderCount: existing?.reminderCount ?? 0,
+      reminderDisabled: existing?.reminderDisabled ?? false,
     };
     this.save(db);
   }
@@ -137,6 +139,16 @@ export class DbService {
       channel.reminderCount = (channel.reminderCount ?? 0) + 1;
       this.save(db);
     }
+  }
+
+  setReminderDisabled(channelId: string, disabled: boolean): void {
+    const db = this.load();
+    const channel = db.channels[channelId];
+    if (!channel) {
+      throw new Error('이 채널에 연동된 게임이 없습니다. 먼저 /연동 명령어를 사용해주세요.');
+    }
+    channel.reminderDisabled = disabled;
+    this.save(db);
   }
 }
 

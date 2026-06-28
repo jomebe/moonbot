@@ -4,6 +4,7 @@ import { unlinkGameCommand } from './unlinkGame.js';
 import { registerPlayerCommand } from './registerPlayer.js';
 import { removeCommand } from './remove.js';
 import { fastPassCommand } from './fastPass.js';
+import { toggleReminderCommand } from './toggleReminder.js';
 import type { SlashCommandModule } from './types.js';
 
 export const commandList: SlashCommandModule[] = [
@@ -13,6 +14,7 @@ export const commandList: SlashCommandModule[] = [
   registerPlayerCommand,
   removeCommand,
   fastPassCommand,
+  toggleReminderCommand,
 ];
 
 export const commandMap = new Map<string, SlashCommandModule>(

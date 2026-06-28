@@ -104,3 +104,26 @@ test('DbService - 상태 업데이트', () => {
   assert.equal(remindedLink?.lastReminderAt, '2026-06-19T01:00:00.000Z');
   assert.equal(remindedLink?.reminderCount, 1);
 });
+
+test('DbService - 알람 비활성화(reminderDisabled) 설정', () => {
+  const db = new DbService(tempDbPath);
+  const channelId = 'test-channel-4';
+  const gameId = '22222222-3333-4444-5555-666666666666';
+
+  db.setLink(channelId, gameId);
+  
+  // 기본값 검사 (false 또는 undefined에서 false로)
+  let link = db.getLink(channelId);
+  assert.equal(link?.reminderDisabled, false);
+
+  // 알람 비활성화 설정
+  db.setReminderDisabled(channelId, true);
+  link = db.getLink(channelId);
+  assert.equal(link?.reminderDisabled, true);
+
+  // 다시 활성화 설정
+  db.setReminderDisabled(channelId, false);
+  link = db.getLink(channelId);
+  assert.equal(link?.reminderDisabled, false);
+});
+

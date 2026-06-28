@@ -347,7 +347,7 @@ export const startPolling = (
             const isQuietHours = getKstHour(now) < 8;
             const mappedUserId = link.players[result.currentPlayer];
 
-            if (reminderDue && !isQuietHours && mappedUserId) {
+            if (reminderDue && !isQuietHours && mappedUserId && !link.reminderDisabled) {
               const reminder = getEscalatedReminder(link.reminderCount ?? 0);
               try {
                 await sendChannelMessage(client, link.channelId, `<@${mappedUserId}> ${reminder}`);
